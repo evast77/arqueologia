@@ -1,10 +1,17 @@
 import streamlit as st
+import geopy
+from geopy.geocoders import Nominatim
 import folium
 from streamlit_folium import folium_static
-from geopy.geocoders import Nominatim
 from PIL import Image
+import io
+import base64
+import requests
+import pandas as pd
 import os
 import sqlite3
+import piexif
+import piexif.helper
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
@@ -21,17 +28,58 @@ if password != password_correcta:
     st.warning("Acceso denegado. Introduce la contraseña correcta.")
     st.stop()
 
+# Función para extraer coordenadas GPS de una imagen
+def obtener_gps_de_imagen(image_file):
+    try:
+        img = Image.open(image_file)
+        exif_data = piexif.load(img.info["exif"])
+        gps_info = exif_data.get(piexif.IFD.GPS, {})
+        
+        if gps_info:
+            lat = gps_info.get(2)
+            lon = gps_info.get(4)
+            
+            if lat and lon:
+                lat = lat[0] + lat[1] / 60 + lat[2] / 3600
+                lon = lon[0] + lon[1] / 60 + lon[2] / 3600
+                
+                if gps_info[1] == b'S':
+                    lat = -lat
+                if gps_info[3] == b'W':
+                    lon = -lon
+                
+                return lat, lon
+        
+    except Exception as e:
+        print("Error al extraer GPS de la imagen:", e)
+    return None, None
+
 # Obtener la ubicación GPS real
 def obtener_ubicacion_real():
     try:
-        geolocator = Nominatim(user_agent="geo_app")
-        location = geolocator.geocode("Barcelona, Spain")  # Prueba con una ubicación fija
-        if location:
-            return location.latitude, location.longitude
+        response = requests.get("https://ipinfo.io/json")
+        data = response.json()
+        lat, lon = map(float, data["loc"].split(","))
+        return lat, lon
     except:
         return None, None
 
-latitude, longitude = obtener_ubicacion_real()
+latitude, longitude = None, None
+
+# Captura de imagen desde la cámara o subida
+st.write("## 📷 Captura de imagen")
+image_file = st.file_uploader("Sube una foto del petroglifo o artefacto", type=["jpg", "png", "jpeg"])
+
+if image_file is not None:
+    image = Image.open(image_file)
+    st.image(image, caption="Imagen cargada", use_column_width=True)
+    
+    # Intentar obtener GPS desde la imagen
+    latitude, longitude = obtener_gps_de_imagen(image_file)
+    if not latitude or not longitude:
+        latitude, longitude = obtener_ubicacion_real()
+    
+    st.success("Imagen guardada correctamente")
 
 if latitude and longitude:
     st.write(f"**Ubicación estimada:** {latitude}, {longitude}")
@@ -43,15 +91,6 @@ if latitude and longitude:
     mapa = folium.Map(location=[latitude, longitude], zoom_start=15)
     folium.Marker([latitude, longitude], popup="Ubicación actual").add_to(mapa)
     folium_static(mapa)
-
-# Captura de imagen desde la cámara o subida
-st.write("## 📷 Captura de imagen")
-image_file = st.file_uploader("Sube una foto del petroglifo o artefacto", type=["jpg", "png", "jpeg"])
-
-if image_file is not None:
-    image = Image.open(image_file)
-    st.image(image, caption="Imagen cargada", use_column_width=True)
-    st.success("Imagen guardada correctamente")
 
 # Clasificación del objeto
 st.write("## 🏺 Clasificación del hallazgo")
