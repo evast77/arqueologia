@@ -1,7 +1,6 @@
 streamlit
 folium
 streamlit_folium
-sqlite3
 python-dotenv
 pandas
 requests
