@@ -1,8 +1,8 @@
 streamlit
-geopy
 folium
 streamlit_folium
-pillow
-requests
-pandas
+sqlite3
 python-dotenv
+pandas
+requests
+piexif
